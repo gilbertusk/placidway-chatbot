@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+# runtime logs may contain visitors' names and emails
+data/logs/
+html_snapshots/
