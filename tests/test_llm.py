@@ -175,6 +175,25 @@ def test_server_errors_are_retried_on_the_same_model(monkeypatch):
     assert sleeps == [2.0]
 
 
+def test_thinking_level_is_sent_and_dropped_for_models_that_reject_it(monkeypatch):
+    client, calls, _ = _client_with_fake_generate(monkeypatch, lambda model, _: "{}")
+    client.thinking_level = "LOW"
+    levels: list[str | None] = []
+
+    def fake_generate_content(*, model, contents, config):
+        level = config.thinking_config.thinking_level if config.thinking_config else None
+        levels.append(level)
+        if level is not None and model == "model-a":
+            raise _api_error(400, "Thinking level LOW is not supported for this model.")
+        return _FakeTextResponse("{}")
+
+    monkeypatch.setattr(client._client.models, "generate_content", fake_generate_content)
+
+    assert _ask(client) == {}
+    assert _ask(client) == {}
+    assert [str(level) if level else None for level in levels] == ["ThinkingLevel.LOW", None, None]
+
+
 def test_from_settings_wires_models_and_fallbacks(monkeypatch):
     monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setenv("GEMINI_ANSWER_MODEL", "big")

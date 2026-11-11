@@ -30,6 +30,8 @@ CHAT_MAX_WAIT_S = 8.0  # a visitor is waiting: give up quickly and show a friend
 INGEST_MAX_WAIT_S = 70.0  # building the index can sit out a per-minute quota window
 DEFAULT_COOLDOWN_S = 60.0  # how long to leave a rate-limited model alone when the error gives no hint
 ERROR_TEXT_LIMIT = 300
+# "Thinking level MINIMAL is not supported for this model."
+THINKING_UNSUPPORTED_RE = re.compile(r"error 400\b.*thinking", re.IGNORECASE | re.DOTALL)
 
 
 def retry_hint_seconds(error_text: str) -> float | None:
@@ -93,7 +95,7 @@ class GeminiClient:
     EMBED_BATCH = 100  # API limit per embed request
 
     def __init__(self, api_key: str, answer_model: str, embedding_model: str, embedding_dim: int = 768,
-                 retries: int = 3, fallbacks: Mapping[str, Sequence[str]] | None = None):
+                 retries: int = 3, fallbacks: Mapping[str, Sequence[str]] | None = None, thinking_level: str = ""):
         if not api_key:
             raise LLMError("GEMINI_API_KEY is not set")
         from google import genai  # imported here so tests do not need the SDK configured
@@ -103,9 +105,11 @@ class GeminiClient:
         self.embedding_model = embedding_model
         self.embedding_dim = embedding_dim
         self.retries = retries
+        self.thinking_level = thinking_level
         self.fallbacks = {model: tuple(others) for model, others in (fallbacks or {}).items()}
         self.last_model: str | None = None  # which model wrote the latest reply (shown in test reports)
         self._cooldown_until: dict[str, float] = {}  # model -> time.monotonic() when its quota frees up
+        self._no_thinking_level: set[str] = set()  # models that rejected `thinking_level`
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "GeminiClient":
@@ -115,6 +119,7 @@ class GeminiClient:
                 settings.answer_model: settings.answer_fallbacks,
                 settings.router_model: settings.router_fallbacks,
             },
+            thinking_level=settings.thinking_level,
         )
 
     def candidates(self, model: str) -> list[str]:
@@ -154,20 +159,30 @@ class GeminiClient:
     def generate_json(self, *, system: str, prompt: str, schema: dict, model: str | None = None) -> dict:
         from google.genai import types
 
-        config = types.GenerateContentConfig(
-            system_instruction=system,
-            temperature=0.0,
-            response_mime_type="application/json",
-            response_json_schema=schema,
-        )
+        def config_for(candidate: str) -> types.GenerateContentConfig:
+            level = "" if candidate in self._no_thinking_level else self.thinking_level
+            return types.GenerateContentConfig(
+                system_instruction=system,
+                temperature=0.0,
+                response_mime_type="application/json",
+                response_json_schema=schema,
+                thinking_config=types.ThinkingConfig(thinking_level=level) if level else None,
+            )
+
         now = time.monotonic()
         ready = [m for m in self.candidates(model or self.answer_model) if self._cooldown_until.get(m, 0.0) <= now]
         for candidate in ready:
+            call = lambda: self._client.models.generate_content(  # noqa: E731
+                model=candidate, contents=prompt, config=config_for(candidate))
             try:
-                response = self._with_retries(
-                    lambda: self._client.models.generate_content(model=candidate, contents=prompt, config=config),
-                    cooldown_model=candidate,
-                )
+                try:
+                    response = self._with_retries(call, cooldown_model=candidate)
+                except LLMError as exc:
+                    if candidate in self._no_thinking_level or not THINKING_UNSUPPORTED_RE.search(str(exc)):
+                        raise
+                    log.warning("%s does not accept thinking level %s; using its default", candidate, self.thinking_level)
+                    self._no_thinking_level.add(candidate)
+                    response = self._with_retries(call, cooldown_model=candidate)
             except RateLimited as exc:
                 log.warning("%s; trying the next model", exc)
                 continue
