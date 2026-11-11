@@ -26,12 +26,27 @@ def _env(name: str, default: str) -> str:
     return value or default
 
 
+def _env_list(name: str, default: str) -> tuple[str, ...]:
+    """Comma-separated list. Unset = `default`; set to an empty string = no entries."""
+    raw = os.getenv(name)
+    return tuple(item.strip() for item in (default if raw is None else raw).split(",") if item.strip())
+
+
+# Tried in order when the preferred model's free-tier quota is used up (quotas are per model).
+DEFAULT_ANSWER_FALLBACKS = "gemini-3.7-flash,gemini-3.6-flash,gemini-3.5-flash,gemini-3.5-flash-lite,gemini-3.1-flash-lite"
+DEFAULT_ROUTER_FALLBACKS = "gemini-3.1-flash-lite,gemini-3.5-flash,gemini-3.6-flash"
+
+
 @dataclass(frozen=True)
 class Settings:
     # LLM provider
-    gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", "").strip())
+    gemini_api_key: str = field(default_factory=lambda: os.getenv("GEMINI_API_KEY", "").strip(), repr=False)
     answer_model: str = field(default_factory=lambda: _env("GEMINI_ANSWER_MODEL", "gemini-3.8-flash"))
+    answer_fallbacks: tuple[str, ...] = field(
+        default_factory=lambda: _env_list("GEMINI_ANSWER_FALLBACKS", DEFAULT_ANSWER_FALLBACKS))
     router_model: str = field(default_factory=lambda: _env("GEMINI_ROUTER_MODEL", "gemini-3.5-flash-lite"))
+    router_fallbacks: tuple[str, ...] = field(
+        default_factory=lambda: _env_list("GEMINI_ROUTER_FALLBACKS", DEFAULT_ROUTER_FALLBACKS))
     embedding_model: str = field(default_factory=lambda: _env("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001"))
     embedding_dim: int = field(default_factory=lambda: int(_env("EMBEDDING_DIM", "768")))
 
@@ -45,7 +60,7 @@ class Settings:
     chunk_max_chars: int = field(default_factory=lambda: int(_env("CHUNK_MAX_CHARS", "1400")))
 
     # Admin (refresh + unanswered log). Empty token = admin actions disabled in the UI.
-    admin_token: str = field(default_factory=lambda: os.getenv("ADMIN_TOKEN", "").strip())
+    admin_token: str = field(default_factory=lambda: os.getenv("ADMIN_TOKEN", "").strip(), repr=False)
 
     # Storage
     data_dir: Path = field(default_factory=lambda: Path(_env("DATA_DIR", str(ROOT_DIR / "data"))))

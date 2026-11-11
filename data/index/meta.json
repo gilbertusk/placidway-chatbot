@@ -1,0 +1,50 @@
+{
+  "built_at": "2026-11-11 03:28",
+  "page_hashes": {
+    "itc-profile": "b7406424c2b346688f195675c75c39c608644898f0e0fd57bfe95a287e36dc87",
+    "adenocarcinoma-package": "6d61589c9b03c02c21caabc124fe9d5f7b64349c72426cb7f4750c94b44ee1bf",
+    "adrenal-package": "0856c20df36fc7441be53129b3c35592654b8859d61eea115caaf0a33a5d7548",
+    "anal-package": "5ecd2b154c9e9f9217809914e986009ce45c2ad12167fd14279084827b2fbbb8",
+    "itc-videos": "fa7bf230f56e3c19fd169c0a6b39e5d0ae159b5404d7f5ed3cb9fa262a2b5417",
+    "itc-price-list": "01fa38ad62ea005b4b1472e87865b155e91fc16342851a086663bc3c1c0dbd94",
+    "alt-medicine-prices": "bde751ff90a664be07607405f3b3dc71549c36ad3e23d8850953359a3a136892"
+  },
+  "embedding_model": "gemini-embedding-001",
+  "sources": [
+    {
+      "id": "itc-profile",
+      "type": "Clinic profile",
+      "url": "https://www.placidway.com/profile/5/Alternative-Cancer-Treatment-by-ITC-Immunity-Therapy-Center"
+    },
+    {
+      "id": "adenocarcinoma-package",
+      "type": "Treatment package",
+      "url": "https://www.placidway.com/package/7903/Alternative-Adenocarcinoma-Cancer-Treatment-Package-in-Tijuana-Mexico-by-ITC"
+    },
+    {
+      "id": "adrenal-package",
+      "type": "Treatment package",
+      "url": "https://www.placidway.com/package/7902/Alternative-Adrenal-Cancer-Treatment-Package-in-Tijuana-Mexico-by-ITC"
+    },
+    {
+      "id": "anal-package",
+      "type": "Treatment package",
+      "url": "https://www.placidway.com/package/7901/Alternative-Anal-Cancer-Treatment-Package-in-Tijuana-Mexico-by-ITC"
+    },
+    {
+      "id": "itc-videos",
+      "type": "Clinic videos",
+      "url": "https://www.placidway.com/profile-videos/5/Alternative-Cancer-Treatment-by-ITC-Immunity-Therapy-Center"
+    },
+    {
+      "id": "itc-price-list",
+      "type": "Price list",
+      "url": "https://www.placidway.com/price-list/5/Alternative-Cancer-Treatment-by-ITC-Immunity-Therapy-Center"
+    },
+    {
+      "id": "alt-medicine-prices",
+      "type": "Price comparison",
+      "url": "https://www.placidway.com/search-medical-pricings/Alternative-Medicine/All/1"
+    }
+  ]
+}

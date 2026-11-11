@@ -35,8 +35,25 @@ class Chunk:
         return asdict(self)
 
 
-def _split_table(table_lines: list[str], max_chars: int) -> list[str]:
-    header = table_lines[:2] if len(table_lines) >= 2 and set(table_lines[1].replace("|", "").strip()) <= set("-: ") else table_lines[:1]
+def _split_lines(block: str, max_chars: int) -> list[str]:
+    """Split an oversized block with no blank lines (a long list) on line boundaries."""
+    pieces: list[str] = []
+    current = ""
+    for line in block.splitlines():
+        candidate = f"{current}\n{line}" if current else line
+        if len(candidate) > max_chars and current:
+            pieces.append(current)
+            current = line
+        else:
+            current = candidate
+    if current:
+        pieces.append(current)
+    return pieces
+
+
+def _split_table(block: str, max_chars: int) -> list[str]:
+    table_lines = block.splitlines()
+    header =table_lines[:2] if len(table_lines) >= 2 and set(table_lines[1].replace("|", "").strip()) <= set("-: ") else table_lines[:1]
     rows = table_lines[len(header):]
     pieces, current = [], list(header)
     for row in rows:
@@ -75,11 +92,12 @@ def _split_body(body: str, max_chars: int) -> list[str]:
     pieces: list[str] = []
     current = ""
     for block in _blocks(body):
-        if block.startswith("|") and len(block) > max_chars:
+        if len(block) > max_chars:
             if current:
                 pieces.append(current)
                 current = ""
-            pieces.extend(_split_table(block.splitlines(), max_chars))
+            split = _split_table if block.startswith("|") else _split_lines
+            pieces.extend(split(block, max_chars))
             continue
         candidate = f"{current}\n\n{block}" if current else block
         if len(candidate) > max_chars and current:

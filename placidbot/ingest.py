@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from .chunker import Chunk, chunk_page
 from .config import Settings, get_settings
 from .crawler import FetchError, LocalHtmlCrawler, PoliteCrawler
-from .extract import ExtractedPage, drop_cross_page_boilerplate, extract_page
+from .extract import ExtractedPage, collapse_card_lists, drop_cross_page_boilerplate, extract_page
 from .index import HybridIndex
 from .llm import LLMClient, LLMError
 from .sources import SOURCES, Source
@@ -81,6 +81,9 @@ def build_index(settings: Settings | None = None, llm: LLMClient | None = None,
             log.error("Failed %s: %s", source.id, exc)
 
     drop_cross_page_boilerplate(list(pages.values()))
+    # After the boilerplate pass, so "related videos" grids repeated on many pages are already gone.
+    for page in pages.values():
+        page.sections = collapse_card_lists(page.sections, page.title)
 
     # 2. chunk (reuse previous chunks for pages that failed to fetch this time)
     chunks: list[Chunk] = []
@@ -136,7 +139,7 @@ def main() -> None:
     if not args.no_embeddings:
         from .llm import GeminiClient
 
-        llm = GeminiClient(settings.gemini_api_key, settings.answer_model, settings.embedding_model, settings.embedding_dim)
+        llm = GeminiClient.from_settings(settings)
     crawler = LocalHtmlCrawler(args.html_dir) if args.html_dir else None
     _, report = build_index(settings, llm, crawler)
     print(report.summary())

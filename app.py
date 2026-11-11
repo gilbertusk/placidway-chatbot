@@ -20,7 +20,7 @@ log = logging.getLogger("app")
 settings = get_settings()
 
 try:
-    llm = GeminiClient(settings.gemini_api_key, settings.answer_model, settings.embedding_model, settings.embedding_dim)
+    llm = GeminiClient.from_settings(settings)
 except LLMError as exc:
     log.error("LLM not configured (%s). Set the GEMINI_API_KEY secret.", exc)
     llm = None

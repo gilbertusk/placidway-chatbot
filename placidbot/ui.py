@@ -24,6 +24,7 @@ from .sources import SOURCES
 
 log = logging.getLogger(__name__)
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+MAX_MESSAGE_CHARS = 2000  # every message is sent to Gemini; cap pasted walls of text
 
 EXAMPLES = [
     "How much does alternative adenocarcinoma cancer treatment cost in Mexico?",
@@ -70,7 +71,7 @@ class App:
 
     # chat ---------------------------------------------------------------
     def respond(self, message: str, messages: list[dict], session: dict):
-        message = (message or "").strip()
+        message = (message or "").strip()[:MAX_MESSAGE_CHARS]
         if not message:
             return "", messages, session
         session = dict(session or {})
@@ -140,7 +141,8 @@ class App:
             gr.Markdown(INTRO)
             chatbot = gr.Chatbot(height=480, label="Chat", buttons=["copy"], feedback_options=None)
             with gr.Row():
-                box = gr.Textbox(placeholder="Ask about treatments, packages or prices…", show_label=False, scale=8, autofocus=True)
+                box = gr.Textbox(placeholder="Ask about treatments, packages or prices…", show_label=False, scale=8, autofocus=True,
+                                 max_length=MAX_MESSAGE_CHARS)
                 send = gr.Button("Send", variant="primary", scale=1)
             with gr.Row():
                 clear = gr.Button("New conversation", size="sm")

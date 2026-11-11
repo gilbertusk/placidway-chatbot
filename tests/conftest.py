@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 import sys
+import zlib
 from pathlib import Path
 
 import numpy as np
@@ -50,7 +51,7 @@ class FakeLLM:
         vectors = np.zeros((len(texts), 64), dtype=np.float32)
         for i, text in enumerate(texts):
             for token in re.findall(r"[a-z0-9]+", text.lower()):
-                vectors[i, hash(token) % 64] += 1.0
+                vectors[i, zlib.crc32(token.encode()) % 64] += 1.0  # hash() is salted per process
         norms = np.linalg.norm(vectors, axis=1, keepdims=True)
         norms[norms == 0] = 1
         return vectors / norms
@@ -63,6 +64,7 @@ def fake_llm():
 
 @pytest.fixture
 def settings(tmp_path, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-key")
     monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("ADMIN_TOKEN", "test-token")
     monkeypatch.setenv("REQUEST_INTERVAL_S", "0")

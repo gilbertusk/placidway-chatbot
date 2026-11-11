@@ -107,7 +107,7 @@ def test_crawler_waits_between_requests():
     crawler.fetch("https://site.test/a")
     crawler.fetch("https://site.test/b")
     gaps = [b[1] - a[1] for a, b in zip(calls, calls[1:])]
-    assert len(calls) == 3 and min(gaps) >= 0.19
+    assert len(calls) == 3 and min(gaps) >= 0.15  # 0.2 s interval; leave room for coarse OS timers
 
 
 def test_crawler_sends_user_agent():

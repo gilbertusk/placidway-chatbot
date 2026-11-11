@@ -47,7 +47,7 @@ def main() -> None:
     index = HybridIndex.load(settings.index_dir)
     if index is None:
         sys.exit("No knowledge base found. Run: python -m placidbot.ingest")
-    llm = GeminiClient(settings.gemini_api_key, settings.answer_model, settings.embedding_model, settings.embedding_dim)
+    llm = GeminiClient.from_settings(settings)
     bot = KnowledgeBot(llm, index, JsonlLog(settings.logs_dir / "unanswered.jsonl"),
                        router_model=settings.router_model, top_k=settings.top_k)
 

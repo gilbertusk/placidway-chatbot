@@ -87,7 +87,10 @@ questions viewable in the admin panel.
   rewriting; the answer is where accuracy matters.
 - **Hybrid retrieval.** BM25 is exact on names and numbers ("adrenal", "Out-Patient", "$30,000");
   embeddings catch paraphrases and non-English questions. With only seven pages a vector database
-  would be overhead, so the index is a JSON file plus a NumPy array.
+  would be overhead, so the index is a JSON file plus a NumPy array. Two small boosts sit on top:
+  priced passages for cost questions, and chunks whose section heading contains the question's
+  distinguishing words (every chunk of a package page repeats the page title, so the heading is what
+  separates "Included in the In-Patient Program" from the FAQ).
 - **Code checks, not only prompt rules.** The rubric weights accuracy and honesty highest, so the
   promise "never invents prices" is enforced after generation: amounts are compared as digits,
   so `$18,995`, `18995 USD` and Spanish `18.995 USD` match, while a computed total does not.
@@ -104,8 +107,9 @@ pip install -r requirements-dev.txt
 cp .env.example .env                                  # put GEMINI_API_KEY and ADMIN_TOKEN in .env
 python -m placidbot.ingest                            # fetch the 7 pages, build data/index
 python app.py                                         # open http://127.0.0.1:7860
-pytest                                                # 35 offline tests, no API key needed
+pytest                                                # 53 offline tests, no API key needed
 python scripts/run_test_questions.py                  # writes docs/TEST_RESULTS.md
+python scripts/eval_retrieval.py --bm25               # where the right passage ranks for 16 questions
 ```
 
 If the site refuses automated requests, open each page in a browser, save it as
@@ -132,7 +136,9 @@ Free Spaces sleep after a long period without visitors and wake on the next visi
 | `GEMINI_API_KEY` | (required) | Google AI Studio key |
 | `ADMIN_TOKEN` | (empty = admin disabled) | Unlocks Refresh and the unanswered-questions view |
 | `GEMINI_ANSWER_MODEL` | `gemini-3.8-flash` | Writes answers |
+| `GEMINI_ANSWER_FALLBACKS` | `gemini-3.7-flash,…` | Tried in order when the answer model's free quota runs out |
 | `GEMINI_ROUTER_MODEL` | `gemini-3.5-flash-lite` | Rewrites follow-ups, detects language and intent |
+| `GEMINI_ROUTER_FALLBACKS` | `gemini-3.1-flash-lite,…` | Same, for the router |
 | `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-001` | Embeddings (768 dimensions) |
 | `CRAWLER_CONTACT` | maintainer email | Shown in the crawler's User-Agent |
 | `TOP_K` | `6` | Passages given to the answer model |

@@ -221,6 +221,76 @@ def extract_page(html: str, url: str) -> ExtractedPage:
     return ExtractedPage(url=url, title=title, sections=_split_sections(markdown, title), structured_prices=prices)
 
 
+CARD_MAX_CHARS = 80  # a card's body is a short label such as a category or a city
+CARD_RUN_MIN = 6  # this many small sections in a row is a list of cards, not prose
+
+
+def _is_card(section: Section) -> bool:
+    return len(section.text) <= CARD_MAX_CHARS and not section.text.lstrip().startswith("|")
+
+
+def _shared_prefix(paths: list[list[str]]) -> list[str]:
+    prefix = list(paths[0])
+    for path in paths[1:]:
+        same = 0
+        while same < min(len(prefix), len(path)) and prefix[same] == path[same]:
+            same += 1
+        prefix = prefix[:same]
+    return prefix
+
+
+def _cards_to_list(run: list[Section], title: str) -> Section:
+    """One bullet per card: "- <card heading> (<label>; <sub-heading>; <label>)"."""
+    parent = _shared_prefix([sec.heading_path for sec in run])
+    items: list[tuple[str | None, list[str]]] = []  # (card heading, details); heading None = plain line
+    for sec in run:
+        own = sec.heading_path[len(parent):]
+        text = _clean_text(sec.text)
+        if not own:
+            items.append((None, [text]))
+        elif len(own) == 1 or not items or items[-1][0] is None:
+            items.append((" > ".join(own), [text]))
+        else:  # a sub-heading inside the current card
+            items[-1] = (items[-1][0], items[-1][1] + [own[-1], text])
+    lines = [details[0] if name is None else f"- {name} ({'; '.join(details)})" for name, details in items]
+    return Section(heading_path=parent or [title], text="\n".join(lines))
+
+
+def collapse_card_lists(sections: list[Section], title: str) -> list[Section]:
+    """Turn a grid of cards into one list section.
+
+    A page such as the clinic's video gallery is ~130 cards, each a heading
+    with a one-word body ("Cancer Treatment") and a sub-heading with another
+    ("Tijuana, Mexico"). Kept as sections they become hundreds of near-empty
+    chunks that crowd real content out of the search results. As one list
+    they stay searchable ("which videos are about breast cancer?") in a
+    handful of chunks. Returns a new list; the input is not modified.
+    """
+    result: list[Section] = []
+    run: list[Section] = []
+    anchor: list[str] = []
+
+    def flush() -> None:
+        if len(run) >= CARD_RUN_MIN:
+            result.append(_cards_to_list(run, title))
+        else:
+            result.extend(run)
+        run.clear()
+
+    for sec in sections:
+        if not _is_card(sec):
+            flush()
+            result.append(sec)
+            continue
+        if run and sec.heading_path[:len(anchor)] != anchor:
+            flush()  # a small section from another part of the page ends the grid
+        if not run:
+            anchor = sec.heading_path[:-1]
+        run.append(sec)
+    flush()
+    return result
+
+
 _NUMERIC = re.compile(r"\d")
 
 
