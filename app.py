@@ -35,6 +35,15 @@ if index is None:
         log.error("Initial ingestion failed: %s", exc)
         index = None
 
+try:  # the Space runs on ZeroGPU (free accounts cannot pick CPU basic), which refuses to start without a GPU function
+    import spaces
+
+    @spaces.GPU(duration=1)
+    def _zerogpu_placeholder() -> None:
+        """Never called: all model work happens in the Gemini API."""
+except ImportError:  # local runs and CPU Spaces
+    pass
+
 demo = App(settings, llm, index).build()
 
 if __name__ == "__main__":
