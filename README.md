@@ -5,7 +5,7 @@ colorFrom: blue
 colorTo: green
 sdk: gradio
 sdk_version: 6.31.0
-python_version: "3.11"
+python_version: "3.12"
 app_file: app.py
 pinned: false
 short_description: Chatbot for 7 PlacidWay pages with cited sources
