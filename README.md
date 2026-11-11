@@ -11,58 +11,52 @@ pinned: false
 short_description: Chatbot for 7 PlacidWay pages with cited sources
 ---
 
-# PlacidWay Website Knowledge Chatbot
+# PlacidWay Knowledge Chatbot
 
-A chatbot that answers visitor questions using **only** seven PlacidWay pages, cites the page every
-answer comes from, and says "I don't know" instead of guessing.
+A chatbot that answers visitor questions using only seven PlacidWay pages. Every answer links to the
+page it came from, and when the pages do not contain the answer the bot says so instead of guessing.
 
 - **Live demo:** https://huggingface.co/spaces/gilb3rttuss/placidway-chatbot
-- **Test results:** [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md)
-- **Limitations and next steps:** [docs/WRITEUP.md](docs/WRITEUP.md)
+- **Test questions and answers:** [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md)
 
-## What it does
+## Features
 
-| Requirement | How |
+| Area | How it works |
 |---|---|
-| Content ingestion | `placidbot/crawler.py` fetches the 7 assigned URLs only (no link following), checks robots.txt, sends a descriptive User-Agent, waits 1 s between requests. |
-| Knowledge base | Pages are cleaned to Markdown, split by heading into chunks (tables kept whole, long tables split with their header repeated), and indexed with hybrid BM25 + embedding search. |
-| Grounded answers | The model sees only the retrieved passages and must return the ids of those it used. The app turns the ids into source links; the model never writes URLs. |
-| Honest "I don't know" | Prompt rule plus code checks. An answer with facts but no valid citation, or with a price that is not in the cited text, is sent back for one rewrite and otherwise replaced by a fixed "I don't have that information, request a free quote" reply. |
-| Cost questions | Prices are copied with currency and page context ("starting from", program, duration, inclusions). The model may not calculate, convert or estimate. |
-| Chat UI | Gradio, with examples, a free-quote form and a knowledge-base panel. |
-| Refresh | `python -m placidbot.ingest` or the admin "Refresh content" button. The report lists pages that changed; a page that fails to fetch keeps its previous content. |
-| Live deployment | Hugging Face Spaces (free CPU), see below. |
+| Content ingestion | `placidbot/crawler.py` fetches the 7 assigned URLs only (no link following), respects robots.txt, sends a descriptive User-Agent and waits 1 s between requests. |
+| Knowledge base | Pages are cleaned to Markdown and split by heading into chunks. Tables stay whole; long tables are split with their header repeated. Search is hybrid BM25 + embeddings. |
+| Grounded answers | The model only sees the retrieved passages and returns the ids of the ones it used. The app turns ids into source links, so the model never writes a URL. |
+| "I don't know" | Enforced in code as well as in the prompt. An answer without a valid citation, or with a price that is not in the cited text, is sent back for one rewrite and otherwise replaced by a fixed "I don't have that information" reply with a link to the free quote. |
+| Prices | Copied with currency and context ("starting from", program, duration). The model may not calculate, convert or estimate amounts. |
+| Chat UI | Gradio, with example questions, a free-quote form and a knowledge-base panel. |
+| Refresh | `python -m placidbot.ingest` or the admin "Refresh content" button. The report lists changed pages; a page that fails to fetch keeps its previous content. |
+| Extras | Replies in the visitor's language, follow-up questions, a medical disclaimer once per conversation, lead capture, and a log of unanswered questions in the admin panel. |
 
-Nice-to-haves included: replies in the user's language, follow-up questions using chat history, a
-medical disclaimer shown once per conversation, lead capture (quote form), and a log of unanswered
-questions viewable in the admin panel.
-
-## Architecture
+## How a message is answered
 
 ```
-            ┌────────────── ingestion (on start-up if no index, CLI, or admin Refresh) ─────────────┐
- 7 URLs ──▶ PoliteCrawler ──▶ extract_page ──▶ drop_cross_page_boilerplate ──▶ chunk_page ──▶ embed ──▶ data/index/
-            robots.txt,       HTML → Markdown   template lines found          heading-aware      Gemini     chunks.json
-            1 req/s, UA       sections by       on ≥4 pages                   chunks with        embedding  embeddings.npy
-                              heading           (numbers kept)                page/section header           meta.json
-            └──────────────────────────────────────────────────────────────────────────────────────────────┘
+user message + chat history
+  │
+  ▼
+1. Route     small Gemini model → standalone English question, language, intent
+  ▼
+2. Retrieve  hybrid BM25 + embedding search, top 6 passages
+             (skipped for booking, out-of-scope and greeting messages)
+  ▼
+3. Answer    Gemini → {status, answer, source_ids, medical_topic} as JSON
+  ▼
+4. Verify    cited ids exist? every money amount appears in the cited passages?
+             fail → one rewrite → still failing → safe fallback reply
+  ▼
+5. Compose   answer + source links + disclaimer (first medical reply only)
+  ▼
+6. Log       not_found / partial / rewritten answers → data/logs/unanswered.jsonl
+```
 
- user message + history
-   │
-   ▼
- 1. Router (gemini flash-lite, JSON) ── standalone English question · language · intent
-   │                                    (question / quote_request / booking / medical_advice / out_of_scope / greeting)
-   ▼
- 2. Retrieve: hybrid BM25 + embeddings, top 6 (skipped for booking / out-of-scope / greeting)
-   ▼
- 3. Answer (gemini flash, JSON) ── {status, answer, source_ids, medical_topic}
-   ▼
- 4. Verify in code ── cited ids exist? every money amount present in the cited passages?
-   │                   fail → one rewrite with the problem stated → still failing → safe fallback
-   ▼
- 5. Compose ── answer + source links + disclaimer (first medical reply only)
-   ▼
- 6. Log ── not_found / partial / guard-triggered questions → data/logs/unanswered.jsonl
+Ingestion runs at start-up when no index exists, from the CLI, or from the admin panel:
+
+```
+7 URLs → crawl → extract (HTML → Markdown sections) → remove template text → chunk → embed → data/index/
 ```
 
 | Module | Responsibility |
@@ -73,78 +67,109 @@ questions viewable in the admin panel.
 | `placidbot/chunker.py` | Section-bounded chunks with a page/section header |
 | `placidbot/index.py` | Hybrid BM25 + embedding search, save/load |
 | `placidbot/ingest.py` | Ingestion pipeline and refresh report (also the CLI) |
-| `placidbot/llm.py` | The only module that calls Gemini (retries, JSON output, embeddings) |
+| `placidbot/llm.py` | The only module that calls Gemini: retries, model fallbacks, JSON output, embeddings |
 | `placidbot/prompts.py` | Router and answer prompts and their JSON schemas |
-| `placidbot/guard.py` | Money-amount verification against cited text |
-| `placidbot/bot.py` | The chat pipeline above |
+| `placidbot/guard.py` | Checks money amounts against the cited text |
+| `placidbot/bot.py` | The pipeline above |
 | `placidbot/ui.py`, `app.py` | Gradio interface and start-up |
 
-### Design choices
+## Design choices
 
-- **Gemini.** Free tier for the assessment, strong multilingual answers, native JSON-schema output
-  (no fragile parsing), and one provider for both chat and embeddings. Model names are settings, so
-  switching model is a config change; switching provider means replacing `llm.py` only.
-- **A small model for routing, a stronger one for answering.** Routing is classification and
-  rewriting; the answer is where accuracy matters.
+- **Gemini** has a free tier, answers well in many languages, supports JSON-schema output and
+  provides embeddings, so one provider covers everything. Model names are settings; switching
+  provider means replacing `llm.py` only.
+- **Two models.** A small one routes and rewrites the question; a stronger one writes the answer.
+  When a model's free quota runs out, the next one in the fallback list is used.
 - **Hybrid retrieval.** BM25 is exact on names and numbers ("adrenal", "Out-Patient", "$30,000");
-  embeddings catch paraphrases and non-English questions. With only seven pages a vector database
-  would be overhead, so the index is a JSON file plus a NumPy array. Two small boosts sit on top:
-  priced passages for cost questions, and chunks whose section heading contains the question's
-  distinguishing words (every chunk of a package page repeats the page title, so the heading is what
-  separates "Included in the In-Patient Program" from the FAQ).
-- **Code checks, not only prompt rules.** The rubric weights accuracy and honesty highest, so the
-  promise "never invents prices" is enforced after generation: amounts are compared as digits,
-  so `$18,995`, `18995 USD` and Spanish `18.995 USD` match, while a computed total does not.
-- **Citations by id.** The model chooses passage ids; the code maps them to URLs. A model cannot
-  cite a page it was not shown, and it cannot invent a URL.
-- **Refresh without downtime.** A new index is built beside the old one and swapped in only when it
-  succeeds.
+  embeddings handle paraphrases and other languages. With seven pages a vector database is not
+  needed: the index is a JSON file plus a NumPy array. Two small boosts help ranking: priced passages
+  for cost questions, and section headings that match the question (every chunk of a package page
+  repeats the page title, so the heading is what separates "Included in the In-Patient Program" from
+  the FAQ).
+- **Checks in code, not only in the prompt.** Amounts are compared as digits, so `$18,995`,
+  `18995 USD` and Spanish `18.995 USD` match, while a total the model computed itself does not.
+- **Citations by id.** The model can only cite passages it was shown and cannot invent a URL.
+- **Refresh without downtime.** A new index is built next to the old one and swapped in only when
+  the build succeeds.
 
 ## Run locally
 
 ```bash
-python -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements-dev.txt
-cp .env.example .env                                  # put GEMINI_API_KEY and ADMIN_TOKEN in .env
-python -m placidbot.ingest                            # fetch the 7 pages, build data/index
-python app.py                                         # open http://127.0.0.1:7860
-pytest                                                # 53 offline tests, no API key needed
-python scripts/run_test_questions.py                  # writes docs/TEST_RESULTS.md
-python scripts/eval_retrieval.py --bm25               # where the right passage ranks for 16 questions
+cp .env.example .env                                # add GEMINI_API_KEY and ADMIN_TOKEN
+python -m placidbot.ingest                          # fetch the 7 pages and build data/index
+python app.py                                       # http://127.0.0.1:7860
 ```
 
-If the site refuses automated requests, open each page in a browser, save it as
+Tests and checks:
+
+```bash
+pytest                                     # 54 offline tests, no API key needed
+python scripts/run_test_questions.py       # runs the test questions, writes docs/TEST_RESULTS.md
+python scripts/eval_retrieval.py --bm25    # rank of the right passage for 16 questions
+```
+
+If the site blocks automated requests, save each page from a browser as
 `html_snapshots/<source-id>.html` (ids are in `placidbot/sources.py`) and run
 `python -m placidbot.ingest --html-dir html_snapshots`.
 
-Check what was extracted in `data/pages/*.md`: that is exactly what the bot knows.
+The extracted text is in `data/pages/*.md`; that is exactly what the bot knows.
 
 ## Deploy to Hugging Face Spaces
 
-1. Create a Space: SDK **Gradio**, hardware **CPU basic (free)**, visibility **public**.
-2. In the Space's **Settings → Variables and secrets** add the secrets `GEMINI_API_KEY` and `ADMIN_TOKEN`.
-3. Push this repository to the Space (`git remote add space https://huggingface.co/spaces/<user>/<space>`,
-   then `git push space main`). This README's header tells Spaces how to run `app.py`.
-4. On first start the app builds the knowledge base (about a minute). Committing `data/index/` and
-   `data/pages/` after a local ingest makes restarts instant and lets reviewers read the extracted text.
+1. Create a Gradio Space. The demo runs on free **ZeroGPU** hardware, which requires Python 3.10 or
+   3.12 (set in the header of this README) and at least one `@spaces.GPU` function. `app.py`
+   declares an unused placeholder for this; the app itself needs no GPU. On CPU hardware the
+   placeholder is skipped.
+2. Under **Settings → Variables and secrets** add the **secrets** `GEMINI_API_KEY` and `ADMIN_TOKEN`.
+3. Push this repository to the Space's `main` branch. `*.npy` files are stored with Git LFS.
+4. `data/index/` and `data/pages/` are committed, so the app starts without crawling. Without them
+   the first start builds the knowledge base (about a minute).
 
-Free Spaces sleep after a long period without visitors and wake on the next visit (about a minute).
+Free Spaces sleep after a period without visitors and take about a minute to wake up.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `GEMINI_API_KEY` | (required) | Google AI Studio key |
-| `ADMIN_TOKEN` | (empty = admin disabled) | Unlocks Refresh and the unanswered-questions view |
-| `GEMINI_ANSWER_MODEL` | `gemini-3.8-flash` | Writes answers |
-| `GEMINI_ANSWER_FALLBACKS` | `gemini-3.7-flash,…` | Tried in order when the answer model's free quota runs out |
+| `GEMINI_API_KEY` | required | Google AI Studio key |
+| `ADMIN_TOKEN` | empty = admin disabled | Unlocks Refresh and the unanswered-questions view |
+| `GEMINI_ANSWER_MODEL` | `gemini-3.6-flash` | Writes answers |
+| `GEMINI_ANSWER_FALLBACKS` | `gemini-3.8-flash,…` | Tried in order when the answer model's quota runs out |
 | `GEMINI_ROUTER_MODEL` | `gemini-3.5-flash-lite` | Rewrites follow-ups, detects language and intent |
 | `GEMINI_ROUTER_FALLBACKS` | `gemini-3.1-flash-lite,…` | Same, for the router |
+| `GEMINI_THINKING_LEVEL` | `LOW` | Thinking budget; `LOW` answers faster with the same results. Empty = model default |
 | `GEMINI_EMBEDDING_MODEL` | `gemini-embedding-001` | Embeddings (768 dimensions) |
 | `CRAWLER_CONTACT` | maintainer email | Shown in the crawler's User-Agent |
 | `TOP_K` | `6` | Passages given to the answer model |
 
-## Privacy and secrets
+API keys are never in the code; they come from environment variables or Space secrets. Quote-form
+leads and question logs are written to `data/logs/`, which is git-ignored.
 
-No keys are in the code; they come from environment variables or Space secrets. Quote-form leads
-and question logs are written to `data/logs/`, which is git-ignored.
+## Limitations
+
+- **Seven pages only.** Most real questions ("hip replacement in Spain") are outside this content,
+  so the bot answers that it does not have the information and points to the free quote.
+- **Only prices are checked in code.** Other facts (durations, inclusions) rely on the prompt and
+  on citations.
+- **Generic HTML extraction.** The extractor uses general rules rather than PlacidWay-specific
+  selectors, so a layout change could let template text in. `data/pages/` shows the result.
+- **Non-English questions** are searched through an English rewrite, so answer quality depends on
+  that translation.
+- **No persistent storage on the free Space.** Logs and leads are lost on restart, and an admin
+  refresh lasts until the next restart.
+- **Free-tier speed and limits.** Each message makes two or three Gemini calls and usually takes
+  6–10 seconds. Under heavy use the free quota can run out; the bot then falls back to other models
+  or asks the visitor to try again.
+
+## Next steps
+
+1. A larger evaluation set (50–100 questions with expected sources and "should refuse" labels) run
+   in CI.
+2. Claim-level verification: match every sentence of an answer to a supporting quote, not only prices.
+3. Parsers for PlacidWay's package, price-list and comparison templates, so cost and comparison
+   questions can be answered from structured records with exact filters.
+4. Persistent storage for logs, leads and the index, plus a scheduled refresh that alerts on changes.
+5. Send quote requests to PlacidWay's CRM or email, with spam protection.
+6. Streaming replies and an embeddable widget for PlacidWay pages.
