@@ -8,6 +8,7 @@ sdk_version: 6.31.0
 python_version: "3.11"
 app_file: app.py
 pinned: false
+short_description: Chatbot for 7 PlacidWay pages with cited sources
 ---
 
 # PlacidWay Website Knowledge Chatbot
@@ -15,7 +16,7 @@ pinned: false
 A chatbot that answers visitor questions using **only** seven PlacidWay pages, cites the page every
 answer comes from, and says "I don't know" instead of guessing.
 
-- **Live demo:** `<your Hugging Face Space URL>`
+- **Live demo:** https://huggingface.co/spaces/gilb3rttuss/placidway-chatbot
 - **Test results:** [docs/TEST_RESULTS.md](docs/TEST_RESULTS.md)
 - **Limitations and next steps:** [docs/WRITEUP.md](docs/WRITEUP.md)
 
